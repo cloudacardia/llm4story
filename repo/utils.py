@@ -14,6 +14,20 @@ new_path = "../data/cases/diy_pool.txt"
 with open("key.txt", 'r', encoding='utf-8') as f:
     keys = [i.strip() for i in f.readlines()]
 
+def list2text(item_list,type='word'):
+    if type == 'phrase':
+        temp = ""
+        for i in range(len(item_list)):
+            temp += str(i+1) + ". " + item_list[i] + "\n"
+        return temp.strip()
+    elif len(item_list) == 1:
+        return item_list[0]
+    elif len(item_list) == 2:
+        return ' and '.join(item_list)
+    elif len(item_list) > 2:
+        return','.join(item_list[:-1]) + " and "+item_list[-1]
+
+    
 def diy():
     index_num = random.randint(0, len(keys)-1)
     data = []
