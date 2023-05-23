@@ -189,6 +189,7 @@ def pick_info(story,new_info):
 plot_kind = []
 with open("test.prompt.txt", 'r', encoding='utf-8') as file:# yyx change
     reddit_plot = [k.strip() for k in file.readlines()]
+    # print(len(reddit_plot))
     for i in range(len(reddit_plot)):
         j = reddit_plot[i].find('[ ')
         if j != -1:# kind:[_IP/WP/FF/EU/CW/RF/OT/PI/Wp/PM_]_
@@ -203,7 +204,7 @@ if __name__ == '__main__':
         movie_data = json.load(fi)
     num = 0
 
-    while num != len(plot_kind):# 反复续写文件
+    while num < len(plot_kind):# 反复续写文件
         try:
             outputFile = open("results.txt",'r',encoding = 'utf-8')
             output_list = outputFile.readlines()
@@ -313,18 +314,24 @@ if __name__ == '__main__':
 
     # 不同种类信息单独保存在每个不同文件里，一行对应一个prompt
     outputFile = open("results.txt", 'r', encoding='utf-8')
-    content = outputFile.read()
-    content.split('********************************************************************')
+    content = outputFile.read().replace('\n','').split('********************************************************************\n')
 
-    file_list = ['prompt_before_search.txt', 'story_before_search.txt', 'prompt.txt', 'story.txt', 'new_info.txt', 'picked_info.txt', 'new_story.txt']
+
+    file_list = ['prompt_before_search.txt', 'story_before_search.txt',
+                 'prompt.txt', 'story.txt', 'new_info.txt', 'picked_info.txt', 'new_story.txt']
     for i in range(len(file_list)):# 共分为7个文件
         out = open(file_list[i], 'w', encoding='utf-8')
         for each_plot in content:
-            each_plot.split('-----------------------------------------------')
+            each_plot = each_plot.split('-----------------------------------------------')
             if i == 0:# 第一行的plot去掉
                 project = ''.join(each_plot[i].strip().split('\n')[1:])# 合并为一行
             else:
-                project = ''.join(each_plot[i].strip().split('\n'))# 合并为一行
+                #project = ''.join(each_plot[i].strip().split('\n'))# 合并为一行
+                try:
+                    project = ''.join(x.strip() for x in each_plot[i].strip().split('\n'))# 合并为一行
+                except:# 检查是否有报错信息
+                    print(i)
+                    print(each_plot)
             out.write(project+'\n')
         out.close()
 
