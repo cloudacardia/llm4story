@@ -4,6 +4,8 @@ import random
 import os, re
 import torch
 import time
+import sys
+import os
 from sentence_transformers import SentenceTransformer, util
 from utils import *
 
@@ -210,6 +212,7 @@ if __name__ == '__main__':
             output_list = output_list[0:line_sub+1]# 保存生成好的文本
             outputFile.close()
             output_file = open("results.txt", 'w', encoding='utf-8')
+            pre_num = num
             num = 0# 已经生成的plot个数
             for line in output_list:
                 output_file.write(line)
@@ -217,6 +220,10 @@ if __name__ == '__main__':
                     num += 1
             output_file.write("\n")
             print(num)
+            if num == pre_num:# 如果重复尝试某一个plot 则自动重新运行
+                print("")
+                os.system("python llm4story.py")
+
         except:# 刚开始写文件
             num=0
             output_file = open("results.txt", 'w', encoding='utf-8')
@@ -291,8 +298,8 @@ if __name__ == '__main__':
                         # new_info = new_info[-3:-1]
                         new_story = add_new_info(story, picked_info).replace("\n\n","\n")
 
-                        print("plot:"+simple_plot+"\n********************************************************************\n"+
-                              '用时：'+str(time.time() - start)+'s\n')
+                        print("plot:"+simple_plot+'\n用时：'+"{:.2f} s".format(time.time() - start)
+                              +"\n********************************************************************\n")
                         flag = 1
                     except:
                         time.sleep(40)# 根据报错信息，出错时自动等40秒后继续发送任务
