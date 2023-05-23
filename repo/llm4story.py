@@ -229,6 +229,10 @@ if __name__ == '__main__':
                     # save
                     output_file.write("plot:" + simple_plot)
                     output_file.write("\n")
+                    output_file.write(prompt_before_search)
+                    output_file.write("\n\n-----------------------------------------------\n\n")
+                    output_file.write(story_before_search)
+                    output_file.write("\n\n-----------------------------------------------\n\n")
                     output_file.write(prompt)
                     output_file.write("\n\n-----------------------------------------------\n\n")
                     output_file.write(story)
@@ -251,6 +255,14 @@ if __name__ == '__main__':
 
                         all_recommendations = get_all_recommend(movie_data, queries,4)
 
+                        prompt_before_search = make_prompt(conditions=queries)# 直接用指令提示生成 不进行检索
+                        # print(prompt_before_search)
+                        # print("\n\n-----------------------------------------------\n\n")
+
+                        story_before_search = generate(prompt_before_search).replace("\n\n","\n")
+                        # print(story_before_search)
+                        # print("\n\n-----------------------------------------------\n\n")
+
                         example_id_1 = all_recommendations['plot_recommend'][0][0]
                         example_id_2 = all_recommendations['plot_recommend'][1][0]
 
@@ -268,7 +280,6 @@ if __name__ == '__main__':
                         # print(story)
                         # print("\n\n-----------------------------------------------\n\n")
 
-
                         story_summary,new_info = ask_why(story)
                         # print(new_info)
                         # print("\n\n-----------------------------------------------\n\n")
@@ -280,19 +291,34 @@ if __name__ == '__main__':
                         # new_info = new_info[-3:-1]
                         new_story = add_new_info(story, picked_info).replace("\n\n","\n")
 
-                        print("plot:"+simple_plot+"\n")
-                        # print(new_story)
-                        # print("\n\n-----------------------------------------------\n\n")
-                        print("********************************************************************")
-
+                        print("plot:"+simple_plot+"\n********************************************************************\n"+
+                              '用时：'+str(time.time() - start)+'s\n')
                         flag = 1
                     except:
-                        time.sleep(3)# 出错时自动等3秒,继续发送任务# 时间是否合适
+                        time.sleep(40)# 根据报错信息，出错时自动等40秒后继续发送任务
                         flag = 0
-                        if time.time() - start>120.0:# 若时间超过两分钟且未出结果，则重新续写文件
+                        if time.time() - start>280.0:# 若时间超过4分钟且未出结果，则重新续写文件
                             break
-            if time.time() - start > 120.0:  # 若时间超过两钟且未出结果，则重新续写文件
+            if time.time() - start > 280.0:  # 若时间超过4分钟且未出结果，则重新续写文件
+                time.sleep(60)
                 break
-            if i==19:# 尝试了10次时 可以认为失败
-                print("error!")
         output_file.close()
+
+    # 不同种类信息单独保存在每个不同文件里，一行对应一个prompt
+    outputFile = open("results.txt", 'r', encoding='utf-8')
+    content = outputFile.read()
+    content.split('********************************************************************')
+
+    file_list = ['prompt_before_search.txt', 'story_before_search.txt', 'prompt.txt', 'story.txt', 'new_info.txt', 'picked_info.txt', 'new_story.txt']
+    for i in range(len(file_list)):# 共分为7个文件
+        out = open(file_list[i], 'w', encoding='utf-8')
+        for each_plot in content:
+            each_plot.split('-----------------------------------------------')
+            if i == 0:# 第一行的plot去掉
+                project = ''.join(each_plot[i].strip().split('\n')[1:])# 合并为一行
+            else:
+                project = ''.join(each_plot[i].strip().split('\n'))# 合并为一行
+            out.write(project+'\n')
+        out.close()
+
+    outputFile.close()
