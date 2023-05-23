@@ -314,24 +314,23 @@ if __name__ == '__main__':
 
     # 不同种类信息单独保存在每个不同文件里，一行对应一个prompt
     outputFile = open("results.txt", 'r', encoding='utf-8')
-    content = outputFile.read().replace('\n','').split('********************************************************************\n')
-
+    content = outputFile.read().split('********************************************************************\n')
+    if '\n' in content[-1]:
+        content = content[:-1]
 
     file_list = ['prompt_before_search.txt', 'story_before_search.txt',
                  'prompt.txt', 'story.txt', 'new_info.txt', 'picked_info.txt', 'new_story.txt']
     for i in range(len(file_list)):# 共分为7个文件
         out = open(file_list[i], 'w', encoding='utf-8')
         for each_plot in content:
-            each_plot = each_plot.split('-----------------------------------------------')
+            each_plot = [x.replace('\n','') for x in each_plot.split('-----------------------------------------------')]
             if i == 0:# 第一行的plot去掉
-                project = ''.join(each_plot[i].strip().split('\n')[1:])# 合并为一行
+                project = each_plot[i].strip()
+                sub = project.find('Write a magical action')  # queries更改时这里也需要更改
+                project = project[sub:]
+                # print(project)
             else:
-                #project = ''.join(each_plot[i].strip().split('\n'))# 合并为一行
-                try:
-                    project = ''.join(x.strip() for x in each_plot[i].strip().split('\n'))# 合并为一行
-                except:# 检查是否有报错信息
-                    print(i)
-                    print(each_plot)
+                project = each_plot[i].strip()# 合并为一行
             out.write(project+'\n')
         out.close()
 
