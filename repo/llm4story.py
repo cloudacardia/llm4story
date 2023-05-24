@@ -4,11 +4,24 @@ import random
 import os, re
 import torch
 from sentence_transformers import SentenceTransformer, util
+from sklearn.preprocessing import MinMaxScaler
 from utils import *
 
 with open("key.txt", 'r', encoding='utf-8') as f:
     keys = [i.strip() for i in f.readlines()]
 
+def get_best_example(all_recommendations,n_best=1):
+    final_scores = []
+    for id in range(len(all_recommendations['plot_recommend'])):
+        overall_score = 0
+        for condition in all_recommendations:
+            overall_score+= all_recommendations[condition][id][-1]
+        final_scores.append((id,overall_score))
+    best_ids = [i[0] for i in sorted(final_scores, key=lambda x: x[1], reverse=True)]
+    if n_best == 1:
+        return best_ids[0]
+    else:
+        return best_ids[0:n_best]
 def multi_corpus_recommend(entry_name,query,corpus,k=4):
     if not os.path.exists('../data/'+entry_name+'.pkl'):
         first = True
@@ -42,8 +55,13 @@ def multi_corpus_recommend(entry_name,query,corpus,k=4):
         pickle.dump(corpus_embeddings, file)
         file.close()
 
-    hits = sorted(hits, key=lambda x: x['score'], reverse=True)[:k]
-    recommendation = [(i['corpus_id'],corpus[i['corpus_id']]) for i in hits]
+    #hits = sorted(hits, key=lambda x: x['score'], reverse=True)#[:k]
+    scores = np.array([i['score'].item() for i in hits]).reshape(-1, 1)
+    scaler = MinMaxScaler()  # 实例化
+    scaler = scaler.fit(scores)  # fit，在这里本质是生成min(x)和max(x)
+    scalered_scores = scaler.transform(scores)  # 通过接口导出结果
+
+    recommendation = [(i['corpus_id'],corpus[i['corpus_id']], scalered_scores[index][0]) for index,i in enumerate(hits)]
     return recommendation
 
 
@@ -57,9 +75,14 @@ def single_corpus_recommend(entry_name,query,corpus,k=4):
     query_embeddings = model.encode(query)
 
     # Find the top-2 corpus documents matching each query
-    hits = util.semantic_search(query_embeddings, corpus_embeddings, top_k=k)
+    hits = util.semantic_search(query_embeddings, corpus_embeddings,top_k=len(corpus))
     #print(hits)
-    recommendation = [(i['corpus_id'],corpus[i['corpus_id']]) for i in hits[0]]
+    scores = np.array([i['score'] for i in hits[0]]).reshape(-1, 1)
+    scaler = MinMaxScaler()  # 实例化
+    scaler = scaler.fit(scores)  # fit，在这里本质是生成min(x)和max(x)
+    scalered_scores = scaler.transform(scores)  # 通过接口导出结果
+
+    recommendation = [(i['corpus_id'],corpus[i['corpus_id']], scalered_scores[index][0]) for index,i in enumerate(hits[0])]
     return recommendation
 
 def clean_split(text):
@@ -102,16 +125,16 @@ def get_all_recommend(movie_data, queries,topk=4):
         all_subjects.append(subjects)
         all_plots.append(plots)
 
-    #all_recommendations['mood_recommend'] = single_corpus_recommend('mood',queries['mood'], all_moods, k=topk)
+    all_recommendations['mood_recommend'] = single_corpus_recommend('mood',queries['mood'], all_moods, k=topk)
     #all_recommendations['style_recommend'] = single_corpus_recommend('style',queries['style'], all_styles, k=topk)
 
-    #all_recommendations['genre_recommend'] = multi_corpus_recommend('genre',queries['genre'], all_genres, k=topk)
+    all_recommendations['genre_recommend'] = multi_corpus_recommend('genre',queries['genre'], all_genres, k=topk)
     all_recommendations['subject_recommend'] = multi_corpus_recommend('subjects',queries['subjects'], all_subjects, k=topk)
     all_recommendations['plot_recommend'] = multi_corpus_recommend('plots',queries['plots'], all_plots, k=topk)
 
     return all_recommendations
 
-def ask_why(story,new_info={},plots=None,depth=0,width=2,story_summary=None):
+def ask_why(story,new_info=[None],plots=None,depth=1,width=2,unclarities=None):
 
     def summarize(story):
         prompt = 'Here is a story: "' + story +'"\n' + 'please point out '+str(width)+' major unclarities in the story in an organized list.\n'
@@ -119,29 +142,36 @@ def ask_why(story,new_info={},plots=None,depth=0,width=2,story_summary=None):
         return story_summary
 
     if plots == None:
-        story_summary = summarize(story)
-        plots = clean_split(story_summary)
+        unclarities = summarize(story)
+        plots = clean_split(unclarities)
+        new_info.append([(story,plots[0])])
+        new_info.append([(story,plots[1])])
 
     new_plots = []
-    for index,plot in enumerate(plots):
-        prompt_1 = 'Here is a story: \n' + story +'\n' + 'An unclarity is: \n'+ plot +'\n' + 'Except for pure coincidence and subject reasons, reveal me some implicit background knowledge within one or two sentencese to rationalize the story. The additional information should be short and imply the topic: '+ list2text(queries['subjects']) + "."
-        explanation = generate(prompt_1)
-        #explanations = clean_split(explanations)
+    for index,unclarity in enumerate(plots):
+        prompt_1 = 'Here is a story: \n' + story +'\n' + 'An unclarity is: \n'+ unclarity +'\n' + 'Except for pure coincidence and mental reasons, please point out '+str(width)+' major reasons to rationalize the story. The additional information should be short and imply the topic: '+ list2text(queries['subjects']) + "."
+        #prompt_1 = 'Here is a story: \n' + story +'\n' + 'An unclarity is: \n'+ unclarity +'\n' + 'Except for pure coincidence and subject reasons, reveal me some implicit background knowledge within one or two sentencese to rationalize the story. The additional information should be short and imply the topic: '+ list2text(queries['subjects']) + "."
+        explanations = generate(prompt_1)
+        explanations = clean_split(explanations)
         #prompt_2 = 'Here is a story: \n' + story +'\n' + 'Here is a plot: \n'+plot + '\n'+ 'Here are a list of possible reasons about why the above plot is reasonable in the story: \n' + list2text(explanations,type='phrase') + '\n' + ' pretend to be a professional writer, please select the reason that is the closest to the '+ list2text(queries['subjects']) + ' and only output the index number without any explanation.'
         #explanation_num = random.randint(0, len(explanations)-1)
         #output = generate(prompt_2)
         #explanation_num = int(re.sub("[/.,a-zA-Z]*","",output).strip()) - 1 # prompt 里explaination的序号 进行了+1
-        new_plots.append(explanation) # pick an explanation
-        if str(index) not in list(new_info.keys()):
-            new_info[str(index)] = [(plot,explanation)]
-        else:
-            new_info[str(index)].append((plot,explanation))
+        new_plots+=explanations # pick an explanation
+        for index,explanation in enumerate(explanations):
+            current_index = len(new_info) + 1
+            if current_index % width == 0:
+                new_info.append(new_info[int(current_index / width)-1] + [(unclarity,explanation)])
+            elif current_index % width !=0:
+                new_info.append(new_info[int((current_index-1) / width)-1] + [(unclarity, explanation)])
+            else:
+                new_info.append([(unclarity, explanation)])
 
-    if depth < 1:
-        depth += 1
-        story_summary,new_info = ask_why(story, new_info, new_plots, depth,width, story_summary)
-        return story_summary,new_info
-    return story_summary,new_info
+    # if depth < 1:
+    #     depth += 1
+    #     unclarities,new_info = ask_why(story, new_info, new_plots, depth,width, unclarities)
+    #     return unclarities,new_info
+    return unclarities,new_info
 
 def add_new_info(story,picked_info):
     num_parts = 2
@@ -169,11 +199,11 @@ def add_new_info(story,picked_info):
     return new_story
 def pick_info(story,new_info):
     chain_of_reasons = []
-    for index in list(new_info.keys()):
+    for index in range(3,7): #只选取最后四个info作为chain of reasons
         chain_of_reason = []
         for each in list(reversed(new_info[index])):
             chain_of_reason.append(each[-1])
-        chain_of_reason.append(each[0])
+        #chain_of_reason.append(each[0])
         chain_of_reason = list(reversed(chain_of_reason))
         chain_of_reasons.append(". ".join(chain_of_reason).replace("..","."))
 
@@ -190,14 +220,14 @@ if __name__ == '__main__':
 
     all_recommendations = get_all_recommend(movie_data, queries,4)
 
-    example_id_1 = all_recommendations['plot_recommend'][0][0]
-    example_id_2 = all_recommendations['plot_recommend'][1][0]
+    example_id = get_best_example(all_recommendations)
 
-    example_1 = movie_data[example_id_1]
-    example_2 = movie_data[example_id_2]
-    examples = [example_1]
-    #examples = []
-    #examples = [example_1, example_2]
+    # example_id_1 = all_recommendations['plot_recommend'][0][0]
+
+    example = movie_data[example_id]
+
+    examples = [example]
+
 
     prompt = make_prompt(examples=examples, conditions=queries)
     print(prompt)
@@ -207,7 +237,6 @@ if __name__ == '__main__':
     print(story)
     print("\n\n-----------------------------------------------\n\n")
 
-
     story_summary,new_info = ask_why(story)
     print(new_info)
     print("\n\n-----------------------------------------------\n\n")
@@ -216,7 +245,6 @@ if __name__ == '__main__':
     print(picked_info)
     print("\n\n-----------------------------------------------\n\n")
 
-    #new_info = new_info[-3:-1]
     new_story = add_new_info(story, picked_info).replace("\n\n","\n")
     print(new_story)
     print("\n\n-----------------------------------------------\n\n")
